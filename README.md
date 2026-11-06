@@ -18,6 +18,45 @@ RANK  NAME                 SCORE  PATH
 5 of 24 candidates, 19 dropped
 ```
 
+## Pi extension
+
+The package also ships a Pi extension (`src/extension.js`). At `before_agent_start` it
+ranks the installed skills for the user's prompt in process and appends the selection
+to the system prompt:
+
+```text
+## Selected skills (pi-skill-fit)
+- /root/.agents/skills/security-audit/SKILL.md — security-audit: security, review
+```
+
+Rules: at most 5 entries, the matched tokens (max 4) are shown, the whole block is
+capped at 700 characters, and token lists shrink before entries are dropped. The same
+selection is injected once per session; a later prompt that selects a different set
+injects the new set. Any failure is swallowed and reported once on stderr, so the
+extension can never block the agent start.
+
+Enable it with `pi -e ./src/extension.js`, or install the package and let the `pi`
+manifest in `package.json` load it. Disable it either way:
+
+```bash
+PI_SKILL_FIT=off pi ...
+```
+
+or, in `settings.json`:
+
+```json
+{ "extensionSettings": { "pi-skill-fit": false } }
+```
+
+`false`, `"off"` and `{ "enabled": false }` all disable it. A value of `true` or a
+missing entry leaves it enabled.
+
+Known limitation: the `before_agent_start` context does not expose the active role, so
+the extension cannot apply a role's `skills:` allowlist and uses the global selector.
+The CLI keeps `--role` support. Role-level `extensionSettings` are resolved by
+pi-ext-roles for programmatic consumers but are not delivered to the Pi CLI, so only
+the settings file and the environment variable act as switches today.
+
 ## Requirements
 
 Node.js >= 22. No runtime dependencies, no build step.

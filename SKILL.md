@@ -35,6 +35,13 @@ pi-skill-fit "<task text>" --limit 5 --json --explain --role <name> --roots <dir
 | `--roots <dir>` | Skill root to scan; repeatable, replaces defaults. |
 | `--overrides <path>` | Trigger overrides file; defaults to `$XDG_CONFIG_HOME/pi-skill-fit/triggers.json` or `~/.config/pi-skill-fit/triggers.json`. |
 
+## Pi extension
+
+The same selector ships as a Pi extension. It runs at `before_agent_start` and appends
+the selected `SKILL.md` paths to the system prompt (max 5 entries, 700 characters).
+Disable it with `PI_SKILL_FIT=off` or `extensionSettings: { "pi-skill-fit": false }`
+in `settings.json`.
+
 ## Output contract
 
 - **Table mode** (default): `RANK  NAME  SCORE  PATH` rows, then a summary line.

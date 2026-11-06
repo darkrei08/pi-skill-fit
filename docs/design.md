@@ -29,6 +29,30 @@ Diktat for v1: role assignment is read from the role files, and pi-skill-fit own
 
 Dictates: `--role` reads that file, applies only when `!*` is present, and errors (exit 2) naming the path when the role does not exist.
 
+## Pi extension
+
+The CLI selection is exposed to Pi through `src/extension.js`, a `before_agent_start`
+handler that imports the same modules in process. It appends at most five entries and
+four matched tokens per entry to `event.systemPromptOptions.appendSystemPrompt`, which
+is the documented prompt-append surface; it does not force or replace the prompt, so the
+structured sections and the prompt-cache prefix stay intact. The block is capped at 700
+characters including its heading: token lists are shortened first, entries are dropped
+after that.
+
+State is per extension instance and keyed by session id. A selection signature is stored
+when the block is injected, so an unchanged selection is not injected again. Selection
+errors, a missing skill root, malformed overrides and unexpected prompt shapes are all
+caught; the first one is logged on stderr and nothing reaches the agent start.
+
+Switches: `PI_SKILL_FIT=off`, or `extensionSettings["pi-skill-fit"]` set to `false`,
+`"off"` or `{ "enabled": false }` in `settings.json`.
+
+Known limitation: the hook context does not carry the active role, so a role's `skills:`
+allowlist cannot be applied here. The extension deliberately uses the global selector
+rather than guessing a role; the CLI keeps `--role`. Role `extensionSettings` are a
+pi-ext-roles contract for programmatic consumers and are not delivered to the Pi CLI, so
+the settings file and the environment variable are the effective switches.
+
 ## Scoring model
 
 1. Tokenize the task: lowercase, split on non-alphanumeric, drop tokens shorter than 3 characters, English and Italian stopwords, then normalise suffixes.
