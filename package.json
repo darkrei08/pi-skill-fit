@@ -1,0 +1,21 @@
+{
+  "name": "pi-skill-fit",
+  "version": "0.1.0",
+  "description": "Deterministic selection of the installed skills relevant to a task",
+  "type": "module",
+  "bin": {
+    "pi-skill-fit": "bin/pi-skill-fit.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT",
+  "private": true
+}
