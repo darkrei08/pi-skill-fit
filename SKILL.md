@@ -1,7 +1,7 @@
 ---
 name: pi-skill-fit
-description: "Deterministic selector that picks the most relevant installed agent skills for a task. Use when routing a task to skills, choosing which skill to load, skill selection, skill routing, pick skills, which skill applies, quale skill caricare, selezione skill, routing skill."
-triggers: [skill routing, skill selection, pick skills, which skill, quale skill, selezione skill, skill fit, skill match]
+description: "Deterministic selector that ranks installed agent capabilities by relevance to a query. Answers meta-questions about which capability to load or how to route a query to the right one."
+triggers: [routing, selector, selezione, scegli, quale, load]
 ---
 
 # pi-skill-fit

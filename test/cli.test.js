@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
@@ -215,6 +215,28 @@ describe("--explain", () => {
     const nameMatch = output.selected[0].matches.find((m) => m.source === "name");
     assert.ok(nameMatch);
     assert.equal(nameMatch.weight, 3);
+  });
+});
+
+describe("self-routing regression", () => {
+  test("a domain task does not put pi-skill-fit in the top three", () => {
+    const root = tempDir();
+    // Use the real repo SKILL.md for pi-skill-fit
+    const selfDir = path.join(root, "pi-skill-fit");
+    mkdirSync(selfDir, { recursive: true });
+    const realSkillMd = path.resolve(import.meta.dirname, "..", "SKILL.md");
+    writeFileSync(path.join(selfDir, "SKILL.md"), readFileSync(realSkillMd, "utf8"));
+    // Create a domain skill that should outrank it
+    makeSkill(root, "security-audit", "name: security-audit\ndescription: Deep security review and vulnerability audit of the codebase.");
+    makeSkill(root, "code-review", "name: code-review\ndescription: Review pull requests and code changes.");
+    makeSkill(root, "ponytail-review", "name: ponytail-review\ndescription: Quality review of a change for correctness and load handling.");
+    makeSkill(root, "engineering-excellence", "name: engineering-excellence\ndescription: Performance, accessibility, and production readiness standards.");
+    const result = run(["pick skills for a security review", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    const topThree = output.selected.slice(0, 3).map((s) => s.name);
+    assert.equal(topThree[0], "security-audit", "security-audit must be #1");
+    assert.ok(!topThree.includes("pi-skill-fit"), "pi-skill-fit must not be in the top 3");
   });
 });
 
