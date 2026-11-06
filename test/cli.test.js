@@ -6,6 +6,7 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 
 import { readRoleSkills, filterByRole } from "../src/role.js";
+import { normalizeSuffix } from "../src/score.js";
 
 const BIN = path.resolve(import.meta.dirname, "..", "bin", "pi-skill-fit.js");
 const tempRoots = [];
@@ -329,6 +330,49 @@ describe("trigger overrides", () => {
     assert.equal(result.status, 0);
     assert.match(result.stdout, /\(override:2\)/);
     assert.match(result.stdout, /\(description:1\)/);
+  });
+});
+
+describe("suffix normalisation safety", () => {
+  test("no token in a sample vocabulary normalises to fewer than 4 characters", () => {
+    const vocabulary = [
+      "writing", "reviewing", "reviews", "reviewed", "documentation",
+      "documents", "documentazione", "documenti", "recensione", "recensioni",
+      "security", "testing", "tests", "tested", "design", "skills", "which",
+      "lies", "dies", "tried", "asked", "based", "typed", "runs", "bugs",
+      "adds", "sets", "gets", "puts", "cuts", "logs", "maps", "tags", "aims",
+      "doing", "going", "used", "cried", "fried",
+    ];
+    for (const word of vocabulary) {
+      const stem = normalizeSuffix(word);
+      assert.ok(stem.length >= 4, `"${word}" normalised to "${stem}" (${stem.length} chars < 4)`);
+    }
+  });
+
+  test("writing does not over-stem below 'writ'", () => {
+    const stem = normalizeSuffix("writing");
+    assert.ok(stem.length >= 4, `"writing" -> "${stem}" is too short`);
+    assert.equal(stem, "writ");
+  });
+
+  test("word families collapse to a single stem", () => {
+    // EN documentation family
+    assert.equal(normalizeSuffix("documentation"), normalizeSuffix("documents"));
+    // IT documentation family
+    assert.equal(normalizeSuffix("documentazione"), normalizeSuffix("documenti"));
+    // EN/IT documentation families agree
+    assert.equal(normalizeSuffix("documentation"), normalizeSuffix("documentazione"));
+    // review family
+    const reviewStem = normalizeSuffix("review");
+    assert.equal(normalizeSuffix("reviewing"), reviewStem);
+    assert.equal(normalizeSuffix("reviews"), reviewStem);
+    assert.equal(normalizeSuffix("reviewed"), reviewStem);
+    // test family
+    const testStem = normalizeSuffix("testing");
+    assert.equal(normalizeSuffix("tests"), testStem);
+    assert.equal(normalizeSuffix("tested"), testStem);
+    // IT recensione family
+    assert.equal(normalizeSuffix("recensione"), normalizeSuffix("recensioni"));
   });
 });
 

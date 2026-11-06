@@ -12,13 +12,16 @@ const STOPWORDS_IT = new Set(
 
 /**
  * Light suffix normalisation table. Strips inflectional suffixes to collapse
- * common variants. Never strips below 3 characters. Applied after lowercasing.
+ * common variants. Never produces a stem shorter than 4 characters.
+ * Applied after lowercasing; longest matching suffix wins.
  *
- * English: -ing, -tion, -sion, -ment, -ness, -ies, -ed, -er, -ly, -s
- * Italian: -zione, -zioni, -mente, -ità, -ari, -are, -ire, -ere, -ato, -ata, -ati, -ate, -ione, -ioni, -ando, -endo
+ * English: -ation, -tion, -sion, -ment, -ness, -ing, -ying, -ies, -ily, -ed, -er, -ly, -s
+ * Italian: -azione, -zione, -zioni, -mente, -ione, -ioni, -ando, -endo,
+ *          -are, -ire, -ere, -ato, -ata, -ati, -ate, -ari, -i
  */
 const SUFFIX_RULES = [
   // Italian first (longer suffixes before shorter)
+  { suffix: "azione", min: 10 },
   { suffix: "zione", min: 8 },
   { suffix: "zioni", min: 8 },
   { suffix: "mente", min: 8 },
@@ -34,12 +37,14 @@ const SUFFIX_RULES = [
   { suffix: "ati", min: 6 },
   { suffix: "ate", min: 6 },
   { suffix: "ari", min: 6 },
+  { suffix: "i", min: 8 },
   // English (longer before shorter)
+  { suffix: "ation", min: 8 },
   { suffix: "tion", min: 7 },
   { suffix: "sion", min: 7 },
   { suffix: "ment", min: 7 },
   { suffix: "ness", min: 7 },
-  { suffix: "ying", min: 7 },  // studying -> stud (avoid), so min 7
+  { suffix: "ying", min: 7 },
   { suffix: "ing", min: 6 },
   { suffix: "ies", min: 6 },
   { suffix: "ily", min: 6 },
@@ -49,11 +54,15 @@ const SUFFIX_RULES = [
   { suffix: "s", min: 4 },
 ];
 
-/** Strip one inflectional suffix if the result stays >= 3 chars. */
+const MIN_STEM_LENGTH = 4;
+
+/** Strip one inflectional suffix if the stem stays >= 4 chars. */
 export function normalizeSuffix(token) {
   for (const { suffix, min } of SUFFIX_RULES) {
     if (token.length >= min && token.endsWith(suffix)) {
-      return token.slice(0, -suffix.length);
+      const stem = token.slice(0, -suffix.length);
+      if (stem.length < MIN_STEM_LENGTH) return token;
+      return stem;
     }
   }
   return token;
