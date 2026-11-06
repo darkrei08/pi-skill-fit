@@ -45,8 +45,16 @@ export function parseFrontmatter(text) {
   const fields = {};
   for (const line of text.slice(3, end).split(/\r?\n/)) {
     // NOTE: multi-line YAML scalars are not supported; v1 reads single-line keys.
-    const match = /^(name|description):\s*(.*)$/.exec(line);
-    if (match) fields[match[1]] = unquote(match[2]);
+    const match = /^(name|description|triggers):\s*(.*)$/.exec(line);
+    if (match) {
+      if (match[1] === "triggers") {
+        // Parse as comma-separated or YAML inline list: triggers: [a, b] or triggers: a, b
+        const raw = match[2].trim().replace(/^\[/, "").replace(/\]$/, "").trim();
+        fields.triggers = raw ? raw.split(",").map((t) => unquote(t)).filter(Boolean) : [];
+      } else {
+        fields[match[1]] = unquote(match[2]);
+      }
+    }
   }
   return fields;
 }
@@ -73,6 +81,7 @@ export async function discoverSkills(roots) {
       skills.push({
         name: front.name || path.basename(dir),
         description: front.description || "",
+        triggers: front.triggers || null,
         path: path.join(realDir, "SKILL.md"),
       });
     }

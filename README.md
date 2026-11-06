@@ -31,19 +31,52 @@ Optionally expose the `pi-skill-fit` binary: `npm link`.
 ## Usage
 
 ```text
-pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--roots <dir>]
+pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>]
 ```
 
 | Flag | Meaning |
 | --- | --- |
 | `--role <name>` | Restrict candidates to the role's `skills:` allowlist from `/root/.pi/agent/pi-ext-roles/roles/<name>.md`. Only an explicit `!*` entry restricts; a role without `skills:` does not filter. |
 | `--limit <n>` | Maximum selected skills, default 5, must be >= 1. Remaining matches are reported as dropped. |
-| `--json` | Emit `{task, role, limit, selected, dropped, candidates}` instead of the table. |
+| `--json` | Emit `{task, role, limit, selected, dropped, candidates}` instead of the table. Each selected skill includes a `matches` array with `{token, source, weight}`. |
+| `--explain` | In table mode, append per-skill match details showing which task tokens matched and at what weight. |
 | `--roots <dir>` | Skill root to scan; repeatable, replaces the default roots. |
 
 Default roots, in order: `/root/.agents/skills`, `/root/.pi/agent/skills`, then every `*/skills` directory under `/root/.pi/agent/npm/node_modules`. A skill is a directory containing `SKILL.md`.
 
 Exit codes: `0` success, `2` invalid input (empty task, bad limit, missing role), `1` internal error.
+
+## Scoring model
+
+1. Tokenize the task: lowercase, split on non-alphanumeric, drop tokens shorter than 3 characters, English and Italian stopwords, then apply light suffix normalisation.
+2. A skill's name terms are its `name` split on non-alphanumeric separators; its description terms use the same tokenizer as the task.
+3. For each distinct task token:
+   - `+3` if it matches a name term
+   - `+2` if it matches a `triggers:` alias (see below)
+   - `+1` if it matches a description term
+   - All three can apply.
+4. Drop skills with score 0.
+5. Sort by score descending, then name ascending, then path ascending; take `--limit`.
+
+### Suffix normalisation
+
+A light, dependency-free suffix stripper collapses common inflections:
+- English: -ing, -tion, -sion, -ment, -ness, -ies, -ed, -er, -ly, -s
+- Italian: -zione, -zioni, -mente, -ione, -ioni, -ando, -endo, -are, -ire, -ere, -ato, -ata, -ati, -ate, -ari
+
+Each suffix has a minimum word length to avoid over-stripping (never below 3 characters).
+
+### Trigger aliases
+
+A skill's SKILL.md frontmatter may include a `triggers:` key (YAML list or comma-separated). These tokens are scored at weight 2 (between name=3 and description=1). Skills without this key behave exactly as before.
+
+```yaml
+---
+name: my-skill
+description: Does something useful.
+triggers: [audit, inspect, check]
+---
+```
 
 ## What it does NOT do
 

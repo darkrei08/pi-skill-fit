@@ -31,11 +31,40 @@ Dictates: `--role` reads that file, applies only when `!*` is present, and error
 
 ## Scoring model
 
-1. Tokenize the task: lowercase, split on non-alphanumeric, drop tokens shorter than 3 characters and a small English stopword list.
+1. Tokenize the task: lowercase, split on non-alphanumeric, drop tokens shorter than 3 characters, English and Italian stopwords, then normalise suffixes.
 2. A skill's name terms are its `name` split on non-alphanumeric separators; its description terms use the same tokenizer as the task.
-3. For each distinct task token: `+3` if it matches a name term, `+1` if it matches a description term. Both can apply.
+3. For each distinct task token: `+3` if it matches a name term, `+2` if it matches a `triggers:` alias, `+1` if it matches a description term. All three can apply.
 4. Drop skills with score 0.
 5. Sort by score descending, then name ascending, then path ascending; take `--limit`.
+
+### Suffix normalisation
+
+A light, dependency-free suffix stripper collapses common inflections so that e.g. "reviewing/reviews" match "review" and "documentazione/documenti" collapse. Each rule has a minimum word length threshold to avoid over-stripping (never below 3 characters).
+
+| Suffix | Min length | Language |
+| --- | --- | --- |
+| -zione, -zioni | 8 | IT |
+| -mente | 8 | IT |
+| -ione, -ioni | 7 | IT |
+| -ando, -endo | 7 | IT |
+| -are, -ire, -ere | 6 | IT |
+| -ato, -ata, -ati, -ate, -ari | 6 | IT |
+| -tion, -sion, -ment, -ness | 7 | EN |
+| -ying | 7 | EN |
+| -ing | 6 | EN |
+| -ies, -ily | 6 | EN |
+| -ed, -er, -ly | 5 | EN |
+| -s | 4 | EN |
+
+Rules are tried in order (longest suffix first). Only one suffix is stripped per token.
+
+### Trigger aliases
+
+A skill's SKILL.md frontmatter may include a `triggers:` key — a YAML inline list or comma-separated values. These tokens are scored at weight 2 (between name=3 and description=1). Skills without the key behave exactly as before.
+
+### Bilingual stopwords
+
+Both English and Italian stopword lists are applied during tokenisation. This allows tasks written in Italian to match Italian-described skills without function words inflating scores.
 
 Why deterministic: the input is the task string plus file contents on disk. There is no model, no sampling, no network, no randomness, no time or locale input beyond `localeCompare` on ASCII skill names. Two runs over the same tree produce byte-identical output, which the test suite asserts. The score is a coarse keyword-overlap heuristic; it is meant to narrow a large index to a handful of files a human or agent then reads, not to rank skills by quality.
 
@@ -54,4 +83,6 @@ Why deterministic: the input is the task string plus file contents on disk. Ther
 | Role filter stage | Applied before scoring | Cheaper and equivalent, since the allowlist does not depend on the task. |
 | `candidates` count | Skills with score > 0 after the role filter | Makes `selected + dropped == candidates` hold and keeps the report honest. |
 | Priority tiers (P0-P3) | Not scored in v1 | The tiers are prose; encoding them would invent metadata the skills do not carry. |
-| Description stemming | None | Stemming needs a dictionary or dependency and makes scores harder to explain. |
+| Description stemming | Light suffix normalisation, no dependency | Full stemming needs a dictionary; a short suffix table is auditable and deterministic. |
+| Trigger aliases | `triggers:` frontmatter key, weight 2 | Between name (3) and description (1); allows skill authors to declare activation phrases. |
+| Bilingual stopwords | English + Italian | Operator writes tasks in both languages; IT stopwords prevent function words from scoring. |

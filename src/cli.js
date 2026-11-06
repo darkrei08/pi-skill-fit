@@ -2,7 +2,7 @@ import { discoverSkills, defaultRoots } from "./skills.js";
 import { rankSkills } from "./score.js";
 import { filterByRole, readRoleSkills } from "./role.js";
 
-const USAGE = 'usage: pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--roots <dir>]';
+const USAGE = 'usage: pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>]';
 
 function invalid(message) {
   const error = new Error(`${message}\n${USAGE}`);
@@ -12,7 +12,7 @@ function invalid(message) {
 
 /** Parse CLI arguments into an options object. */
 export function parseArgs(argv) {
-  const options = { task: null, role: null, limit: 5, json: false, roots: [] };
+  const options = { task: null, role: null, limit: 5, json: false, explain: false, roots: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => {
@@ -22,6 +22,7 @@ export function parseArgs(argv) {
       return next;
     };
     if (arg === "--json") options.json = true;
+    else if (arg === "--explain") options.explain = true;
     else if (arg === "--role") options.role = value();
     else if (arg === "--limit") {
       const raw = value();
@@ -36,15 +37,23 @@ export function parseArgs(argv) {
   return options;
 }
 
-function renderTable(selected) {
+function renderTable(selected, explain) {
   const rows = [
     ["RANK", "NAME", "SCORE", "PATH"],
     ...selected.map((skill, index) => [String(index + 1), skill.name, String(skill.score), skill.path]),
   ];
   const widths = rows[0].map((_, column) => Math.max(...rows.map((row) => row[column].length)));
-  return rows
+  let output = rows
     .map((row) => row.map((cell, column) => (column === 3 ? cell : cell.padEnd(widths[column]))).join("  ").trimEnd())
     .join("\n");
+  if (explain) {
+    output += "\n";
+    for (const skill of selected) {
+      const parts = skill.matches.map((m) => `${m.token}(${m.source}:${m.weight})`);
+      output += `\n  ${skill.name}: ${parts.join(", ")}`;
+    }
+  }
+  return output;
 }
 
 /** @param {string[]} argv @returns {Promise<number>} exit code */
@@ -57,18 +66,24 @@ export async function main(argv) {
     const { candidates, selected, dropped } = rankSkills(skills, options.task, options.limit);
 
     if (options.json) {
+      const selectedOut = selected.map((s) => ({
+        name: s.name,
+        score: s.score,
+        path: s.path,
+        matches: s.matches,
+      }));
       process.stdout.write(
         `${JSON.stringify({
           task: options.task,
           role: options.role,
           limit: options.limit,
-          selected,
+          selected: selectedOut,
           dropped,
           candidates: candidates.length,
         })}\n`,
       );
     } else {
-      if (selected.length > 0) process.stdout.write(`${renderTable(selected)}\n`);
+      if (selected.length > 0) process.stdout.write(`${renderTable(selected, options.explain)}\n`);
       process.stdout.write(`${selected.length} of ${candidates.length} candidates, ${dropped} dropped\n`);
     }
     return 0;

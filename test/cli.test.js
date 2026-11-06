@@ -116,6 +116,108 @@ describe("invalid input", () => {
   });
 });
 
+describe("Italian stopwords and suffixes", () => {
+  test("Italian task text selects an Italian-described skill", () => {
+    const root = tempDir();
+    // Skill described in Italian
+    makeSkill(root, "documentazione", "name: documentazione\ndescription: Gestione della documentazione del progetto.");
+    // Skill described in English (should not match Italian task)
+    makeSkill(root, "deploy", "name: deploy\ndescription: Deploy to production servers.");
+    // Task in Italian: "scrivi la documentazione" = "write the documentation"
+    const result = run(["scrivi la documentazione", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.selected.length, 1);
+    assert.equal(output.selected[0].name, "documentazione");
+  });
+});
+
+describe("English inflection collapse", () => {
+  test("reviewing matches review via suffix normalisation", () => {
+    const root = tempDir();
+    makeSkill(root, "code-review", "name: code-review\ndescription: Review pull requests.");
+    const result = run(["reviewing", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.selected.length, 1);
+    assert.equal(output.selected[0].name, "code-review");
+    // "reviewing" -> "review" which matches name token "review"
+    assert.ok(output.selected[0].score >= 3);
+  });
+
+  test("reviews matches review via suffix normalisation", () => {
+    const root = tempDir();
+    makeSkill(root, "code-review", "name: code-review\ndescription: Review pull requests.");
+    const result = run(["reviews", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.selected.length, 1);
+    assert.equal(output.selected[0].name, "code-review");
+  });
+});
+
+describe("triggers alias", () => {
+  test("a triggers alias outranks a description-only match", () => {
+    const root = tempDir();
+    // Skill with trigger alias matching "audit"
+    makeSkill(root, "checker", "name: checker\ntriggers: [audit, inspect]\ndescription: General checking tool.");
+    // Skill with "audit" only in description
+    makeSkill(root, "logger", "name: logger\ndescription: Audit log viewer.");
+    const result = run(["audit", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    // checker: trigger match (2), logger: description match (1)
+    assert.equal(output.selected[0].name, "checker");
+    assert.ok(output.selected[0].score > output.selected[1].score);
+  });
+
+  test("a name match still beats a triggers alias match", () => {
+    const root = tempDir();
+    // Skill with "audit" in name
+    makeSkill(root, "audit-tool", "name: audit-tool\ndescription: Main auditor.");
+    // Skill with "audit" only as a trigger alias
+    makeSkill(root, "checker", "name: checker\ntriggers: [audit]\ndescription: General tool.");
+    const result = run(["audit", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    // audit-tool: name match (3) + description match for "auditor"->"audit" potentially
+    // checker: trigger match (2)
+    assert.equal(output.selected[0].name, "audit-tool");
+    assert.ok(output.selected[0].score > output.selected[1].score);
+  });
+
+  test("a skill without triggers behaves as before", () => {
+    const root = tempDir();
+    makeSkill(root, "plain-skill", "name: plain-skill\ndescription: Does plain work.");
+    const result = run(["plain", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    assert.equal(JSON.parse(result.stdout).selected[0].name, "plain-skill");
+  });
+});
+
+describe("--explain", () => {
+  test("--explain names the matched tokens", () => {
+    const root = tempDir();
+    makeSkill(root, "code-review", "name: code-review\ndescription: Review pull requests.");
+    const result = run(["review", "--roots", root, "--explain"]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /review\(name:3\)/);
+  });
+
+  test("--json includes matches array", () => {
+    const root = tempDir();
+    makeSkill(root, "code-review", "name: code-review\ndescription: Review pull requests.");
+    const result = run(["review", "--roots", root, "--json"]);
+    assert.equal(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(output.selected[0].matches));
+    assert.ok(output.selected[0].matches.length > 0);
+    const nameMatch = output.selected[0].matches.find((m) => m.source === "name");
+    assert.ok(nameMatch);
+    assert.equal(nameMatch.weight, 3);
+  });
+});
+
 describe("determinism", () => {
   test("ordering is stable across two runs", () => {
     const root = tempDir();
