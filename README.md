@@ -31,7 +31,7 @@ Optionally expose the `pi-skill-fit` binary: `npm link`.
 ## Usage
 
 ```text
-pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>]
+pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>] [--overrides <path>]
 ```
 
 | Flag | Meaning |
@@ -41,10 +41,11 @@ pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [-
 | `--json` | Emit `{task, role, limit, selected, dropped, candidates}` instead of the table. Each selected skill includes a `matches` array with `{token, source, weight}`. |
 | `--explain` | In table mode, append per-skill match details showing which task tokens matched and at what weight. |
 | `--roots <dir>` | Skill root to scan; repeatable, replaces the default roots. |
+| `--overrides <path>` | Read trigger overrides from this file instead of the default one. The file must exist and be valid. |
 
 Default roots, in order: `/root/.agents/skills`, `/root/.pi/agent/skills`, then every `*/skills` directory under `/root/.pi/agent/npm/node_modules`. A skill is a directory containing `SKILL.md`.
 
-Exit codes: `0` success, `2` invalid input (empty task, bad limit, missing role), `1` internal error.
+Exit codes: `0` success, `2` invalid input (empty task, bad limit, missing role, malformed overrides), `1` internal error.
 
 ## Scoring model
 
@@ -52,7 +53,7 @@ Exit codes: `0` success, `2` invalid input (empty task, bad limit, missing role)
 2. A skill's name terms are its `name` split on non-alphanumeric separators; its description terms use the same tokenizer as the task.
 3. For each distinct task token:
    - `+3` if it matches a name term
-   - `+2` if it matches a `triggers:` alias (see below)
+   - `+2` if it matches a `triggers:` alias or an override token (see below)
    - `+1` if it matches a description term
    - All three can apply.
 4. Drop skills with score 0.
@@ -78,11 +79,28 @@ triggers: [audit, inspect, check]
 ---
 ```
 
+### Trigger overrides
+
+A skill's frontmatter belongs to its upstream author, and `skills update` overwrites it. To fix or extend the trigger vocabulary of an installed skill without editing it, keep a local override file instead:
+
+```json
+{
+  "writing-for-agents": ["write", "writing", "documentation", "docs", "README", "guide", "manual"],
+  "research": ["investigate", "sources", "evidence", "paper"]
+}
+```
+
+- Location: `--overrides <path>` if given, else `$XDG_CONFIG_HOME/pi-skill-fit/triggers.json`, else `~/.config/pi-skill-fit/triggers.json`. A missing default file means no overrides; it is not an error.
+- Semantics: override tokens are normalised with the same tokenizer and suffix table as everything else, score at weight 2 (same as `triggers:`), and are added to the skill's own triggers, never replacing them.
+- A name that is not installed is ignored silently.
+- A malformed file (not JSON, not an object of string arrays, missing when named with `--overrides`) exits `2` with the path and the reason. It is never silently ignored.
+- `--json` and `--explain` report these matches with `source: "override"`, distinct from `name`, `trigger` and `description`, so a ranking decision stays auditable.
+
 ## What it does NOT do
 
 - It does not discover, install, update, or remove skills upstream. It only reads skill directories that already exist on this machine.
 - It does not call a model, embed anything, or use the network. Scoring is token overlap only.
-- It does not modify any skill, role, or Pi configuration file.
-- It does not judge skill quality and it does not read `SKILL.md` bodies: only `name` and `description` from the frontmatter.
+- It does not modify any skill, role, or Pi configuration file. Overrides live in its own config file and are read-only input to scoring.
+- It does not judge skill quality and it does not read `SKILL.md` bodies: only `name`, `description` and `triggers` from the frontmatter.
 
 See [docs/design.md](docs/design.md) for the design sources and scoring model.

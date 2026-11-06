@@ -9,6 +9,14 @@ import { readRoleSkills, filterByRole } from "../src/role.js";
 
 const BIN = path.resolve(import.meta.dirname, "..", "bin", "pi-skill-fit.js");
 const tempRoots = [];
+// Hermetic XDG root: no default overrides file is read unless a test asks for it.
+const emptyConfig = tempDir();
+
+function overridesFile(content) {
+  const file = path.join(tempDir(), "triggers.json");
+  writeFileSync(file, content);
+  return file;
+}
 
 function tempDir() {
   const dir = mkdtempSync(path.join(tmpdir(), "pi-skill-fit-"));
@@ -22,8 +30,11 @@ function makeSkill(root, dirName, frontmatter) {
   writeFileSync(path.join(dir, "SKILL.md"), frontmatter === null ? "# no frontmatter\n" : `---\n${frontmatter}\n---\n\nBody.\n`);
 }
 
-function run(args) {
-  return spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8" });
+function run(args, env = {}) {
+  return spawnSync(process.execPath, [BIN, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, XDG_CONFIG_HOME: emptyConfig, ...env },
+  });
 }
 
 after(() => {
@@ -237,6 +248,87 @@ describe("self-routing regression", () => {
     const topThree = output.selected.slice(0, 3).map((s) => s.name);
     assert.equal(topThree[0], "security-audit", "security-audit must be #1");
     assert.ok(!topThree.includes("pi-skill-fit"), "pi-skill-fit must not be in the top 3");
+  });
+});
+
+describe("trigger overrides", () => {
+  test("an override raises a skill above a same-score rival", () => {
+    const root = tempDir();
+    makeSkill(root, "alpha-notes", "name: alpha-notes\ndescription: Writes files.");
+    makeSkill(root, "zeta-notes", "name: zeta-notes\ndescription: Writes files.");
+    const baseline = run(["write documentation", "--roots", root, "--json"]);
+    assert.equal(baseline.status, 0);
+    assert.equal(JSON.parse(baseline.stdout).selected[0].name, "alpha-notes");
+
+    const file = overridesFile(JSON.stringify({ "zeta-notes": ["documentation"] }));
+    const result = run(["write documentation", "--roots", root, "--overrides", file, "--json"]);
+    assert.equal(result.status, 0);
+    assert.deepEqual(
+      JSON.parse(result.stdout).selected.map((skill) => [skill.name, skill.score]),
+      [
+        ["zeta-notes", 3],
+        ["alpha-notes", 1],
+      ],
+    );
+  });
+
+  test("override tokens add to frontmatter triggers instead of replacing them", () => {
+    const root = tempDir();
+    makeSkill(root, "checker", "name: checker\ntriggers: [audit]\ndescription: General tool.");
+    const file = overridesFile(JSON.stringify({ checker: ["docs"] }));
+    const result = run(["audit docs", "--roots", root, "--overrides", file, "--json"]);
+    assert.equal(result.status, 0);
+    const selected = JSON.parse(result.stdout).selected[0];
+    assert.equal(selected.score, 4);
+    assert.deepEqual(selected.matches.map((match) => match.source).sort(), ["override", "trigger"]);
+  });
+
+  test("an override for an uninstalled skill is ignored without error", () => {
+    const root = tempDir();
+    makeSkill(root, "alpha-notes", "name: alpha-notes\ndescription: Writes files.");
+    const file = overridesFile(JSON.stringify({ "ghost-skill": ["documentation"] }));
+    const result = run(["write documentation", "--roots", root, "--overrides", file, "--json"]);
+    assert.equal(result.status, 0);
+    assert.deepEqual(
+      JSON.parse(result.stdout).selected.map((skill) => [skill.name, skill.score]),
+      [["alpha-notes", 1]],
+    );
+  });
+
+  test("a malformed overrides file exits 2 naming the path", () => {
+    const root = tempDir();
+    makeSkill(root, "alpha-notes", "name: alpha-notes\ndescription: Writes files.");
+    for (const content of ["{ not json", '{"alpha-notes": [1]}', '["alpha-notes"]']) {
+      const file = overridesFile(content);
+      const result = run(["write", "--roots", root, "--overrides", file]);
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(result.stderr, /overrides/);
+    }
+  });
+
+  test("--overrides points at a temp file and the default path is not read", () => {
+    const root = tempDir();
+    makeSkill(root, "alpha-notes", "name: alpha-notes\ndescription: Writes files.");
+    const configHome = tempDir();
+    mkdirSync(path.join(configHome, "pi-skill-fit"), { recursive: true });
+    writeFileSync(path.join(configHome, "pi-skill-fit", "triggers.json"), "{ broken");
+    const file = overridesFile(JSON.stringify({ "alpha-notes": ["documentation"] }));
+    const result = run(["write documentation", "--roots", root, "--overrides", file, "--json"], {
+      XDG_CONFIG_HOME: configHome,
+    });
+    assert.equal(result.status, 0);
+    assert.equal(JSON.parse(result.stdout).selected[0].score, 3);
+  });
+
+  test("--explain distinguishes an override match from a description match", () => {
+    const root = tempDir();
+    makeSkill(root, "zeta-notes", "name: zeta-notes\ndescription: Writes files.");
+    const file = overridesFile(JSON.stringify({ "zeta-notes": ["documentation"] }));
+    const result = run(["write documentation", "--roots", root, "--overrides", file, "--explain"]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /\(override:2\)/);
+    assert.match(result.stdout, /\(description:1\)/);
   });
 });
 

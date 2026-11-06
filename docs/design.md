@@ -62,6 +62,12 @@ Rules are tried in order (longest suffix first). Only one suffix is stripped per
 
 A skill's SKILL.md frontmatter may include a `triggers:` key — a YAML inline list or comma-separated values. These tokens are scored at weight 2 (between name=3 and description=1). Skills without the key behave exactly as before.
 
+### Trigger overrides
+
+The same weight-2 tier is fed by a local override file: `{ "skill-name": ["term", ...] }` at `--overrides <path>`, else `$XDG_CONFIG_HOME/pi-skill-fit/triggers.json`, else `~/.config/pi-skill-fit/triggers.json`. Tokens are added to the skill's own triggers, never replacing them, and `matches[].source` is `override` so the decision is auditable.
+
+Why a separate file and not more frontmatter: the frontmatter of an installed skill is third-party content. A selector that needs a producer's skill to carry a `write` trigger cannot wait for that producer, cannot edit `/root/.agents/skills` (a `skills update` overwrites it), and must not fork the skill. The overlay is local, outside every skill root, survives updates, and is the user's own statement of how they look for work. Weight 2 keeps it in the existing tier: an override is as strong as an author-declared trigger, weaker than a name, and cannot invent relevance for a skill that is not installed.
+
 ### Bilingual stopwords
 
 Both English and Italian stopword lists are applied during tokenisation. This allows tasks written in Italian to match Italian-described skills without function words inflating scores.
@@ -86,3 +92,6 @@ Why deterministic: the input is the task string plus file contents on disk. Ther
 | Description stemming | Light suffix normalisation, no dependency | Full stemming needs a dictionary; a short suffix table is auditable and deterministic. |
 | Trigger aliases | `triggers:` frontmatter key, weight 2 | Between name (3) and description (1); allows skill authors to declare activation phrases. |
 | Bilingual stopwords | English + Italian | Operator writes tasks in both languages; IT stopwords prevent function words from scoring. |
+| Override weight | 2, same as `triggers:` | The overlay is an authoring substitute, not a stronger signal: it should fix vocabulary, not overpower a skill named after the task. |
+| Override location | Own config file, never a skill root | Third-party frontmatter is overwritten by `skills update`; a file outside every root survives it and modifies no installed skill. |
+| Missing default override file | No overrides, no warning | A missing optional file is the normal state on a fresh machine; only `--overrides <path>` is a promise the tool must keep. |

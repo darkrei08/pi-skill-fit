@@ -33,6 +33,7 @@ pi-skill-fit "<task text>" --limit 5 --json --explain --role <name> --roots <dir
 | `--json` | JSON output: `{task, role, limit, selected, dropped, candidates}`. |
 | `--explain` | For each selected skill, print the task tokens that matched and their weights. |
 | `--roots <dir>` | Skill root to scan; repeatable, replaces defaults. |
+| `--overrides <path>` | Trigger overrides file; defaults to `$XDG_CONFIG_HOME/pi-skill-fit/triggers.json` or `~/.config/pi-skill-fit/triggers.json`. |
 
 ## Output contract
 

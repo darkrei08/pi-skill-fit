@@ -1,8 +1,10 @@
 import { discoverSkills, defaultRoots } from "./skills.js";
 import { rankSkills } from "./score.js";
 import { filterByRole, readRoleSkills } from "./role.js";
+import { applyOverrides, defaultOverridesPath, loadOverrides } from "./overrides.js";
 
-const USAGE = 'usage: pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>]';
+const USAGE =
+  'usage: pi-skill-fit "<task text>" [--role <name>] [--limit <n>] [--json] [--explain] [--roots <dir>] [--overrides <path>]';
 
 function invalid(message) {
   const error = new Error(`${message}\n${USAGE}`);
@@ -12,7 +14,7 @@ function invalid(message) {
 
 /** Parse CLI arguments into an options object. */
 export function parseArgs(argv) {
-  const options = { task: null, role: null, limit: 5, json: false, explain: false, roots: [] };
+  const options = { task: null, role: null, limit: 5, json: false, explain: false, roots: [], overrides: null };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => {
@@ -29,6 +31,7 @@ export function parseArgs(argv) {
       if (!/^\d+$/.test(raw) || Number(raw) < 1) invalid(`--limit must be an integer >= 1, got ${raw}`);
       options.limit = Number(raw);
     } else if (arg === "--roots") options.roots.push(value());
+    else if (arg === "--overrides") options.overrides = value();
     else if (arg.startsWith("--")) invalid(`unknown flag: ${arg}`);
     else if (options.task === null) options.task = arg;
     else invalid(`unexpected argument: ${arg}`);
@@ -62,7 +65,10 @@ export async function main(argv) {
     const options = parseArgs(argv);
     const allowlist = options.role === null ? null : await readRoleSkills(options.role);
     const roots = options.roots.length > 0 ? options.roots : await defaultRoots();
-    const skills = filterByRole(await discoverSkills(roots), allowlist);
+    const overrides = await loadOverrides(options.overrides ?? defaultOverridesPath(), {
+      required: options.overrides !== null,
+    });
+    const skills = applyOverrides(filterByRole(await discoverSkills(roots), allowlist), overrides);
     const { candidates, selected, dropped } = rankSkills(skills, options.task, options.limit);
 
     if (options.json) {

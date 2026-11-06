@@ -74,21 +74,26 @@ function nameTokens(name) {
   return new Set(name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
 }
 
+/** Trigger and override aliases: same tokenizer and suffix table as the task text. */
+function aliasTokens(values) {
+  const tokens = new Set();
+  for (const value of values ?? []) {
+    for (const part of value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) {
+      tokens.add(normalizeSuffix(part));
+    }
+  }
+  return tokens;
+}
+
 /**
  * Score a skill against task tokens.
- * Weights: name=3, triggers=2, description=1.
+ * Weights: name=3, triggers/overrides=2, description=1.
  * Returns { score, matches } where matches is an array of { token, source, weight }.
  */
 export function scoreSkill(taskTokens, skill) {
   const names = nameTokens(skill.name);
-  const triggers = new Set();
-  if (skill.triggers) {
-    for (const t of skill.triggers) {
-      for (const part of t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) {
-        triggers.add(normalizeSuffix(part));
-      }
-    }
-  }
+  const triggers = aliasTokens(skill.triggers);
+  const overrides = aliasTokens(skill.overrides);
   const descriptions = tokenize(skill.description);
   let score = 0;
   const matches = [];
@@ -97,7 +102,11 @@ export function scoreSkill(taskTokens, skill) {
       score += 3;
       matches.push({ token, source: "name", weight: 3 });
     }
-    if (triggers.has(token)) {
+    // NOTE: a token in both a frontmatter trigger and an override scores once, as an override.
+    if (overrides.has(token)) {
+      score += 2;
+      matches.push({ token, source: "override", weight: 2 });
+    } else if (triggers.has(token)) {
       score += 2;
       matches.push({ token, source: "trigger", weight: 2 });
     }
